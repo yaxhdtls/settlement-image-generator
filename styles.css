@@ -1,0 +1,264 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --line: #d8dde3;
+  --text: #17191c;
+  --muted: #667085;
+  --primary: #2f66b3;
+  --primary-dark: #24528f;
+  --primary-soft: #edf4ff;
+  --primary-muted: #426a9f;
+  --accent: #2f66b3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Malgun Gothic", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.app-shell {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.toolbar,
+.summary {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 170px 170px 132px;
+  gap: 12px;
+  align-items: end;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.summary {
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) 132px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+label,
+.summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input,
+button {
+  height: 40px;
+  border-radius: 6px;
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  padding: 0 11px;
+  background: #fff;
+}
+
+button {
+  border: 0;
+  padding: 0 14px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.summary strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+}
+
+.status {
+  min-height: 42px;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.status.error {
+  color: #b42318;
+}
+
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.view-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.view-switch button {
+  height: 32px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.view-switch button.active {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.result-card.saved,
+.list-row.saved {
+  background: #f3f7fd;
+  border-color: #b8cce8;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.card-title {
+  display: block;
+}
+
+.card-meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.download-btn {
+  height: 34px;
+  flex: 0 0 auto;
+  background: #3f7fb8;
+}
+
+.download-btn:hover:not(:disabled) {
+  background: #2f6695;
+}
+
+.download-btn.saved {
+  background: #d9e4f2;
+  color: #24528f;
+}
+
+.download-btn.saved:hover:not(:disabled) {
+  background: #cad9ec;
+}
+
+#downloadAllBtn {
+  background: var(--primary-muted);
+}
+
+#downloadAllBtn:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.results.list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: 92px 120px 140px minmax(220px, 1fr) 72px 120px 92px;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.row-date,
+.row-hospital,
+.row-customer,
+.row-tax {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.row-customer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-final {
+  text-align: right;
+  color: #174ea6;
+}
+
+.preview {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  display: block;
+  border: 1px solid #e7eaf0;
+  background: #fff;
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .toolbar,
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .results {
+    grid-template-columns: 1fr;
+  }
+
+  .list-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .row-final {
+    text-align: left;
+  }
+}

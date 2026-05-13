@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>통역사 주간 정산 이미지 생성기</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="정산 이미지 생성 설정">
+        <div class="field wide">
+          <label for="sheetUrl">Google Sheet URL</label>
+          <input
+            id="sheetUrl"
+            type="url"
+            value="https://docs.google.com/spreadsheets/d/1rznxjL6t9u1D9nrAwYLoDsstBTU9k-ZbIH6sS0aHAU4/edit?gid=431907368#gid=431907368"
+          />
+        </div>
+        <div class="field">
+          <label for="startDate">기준 시작 날짜</label>
+          <input id="startDate" type="date" />
+        </div>
+        <div class="field">
+          <label for="endDate">기준 끝 날짜</label>
+          <input id="endDate" type="date" />
+        </div>
+        <button id="loadBtn" type="button">이미지 생성</button>
+      </section>
+
+      <section class="summary" aria-live="polite">
+        <div>
+          <span>정산 기간</span>
+          <strong id="periodText">-</strong>
+        </div>
+        <div>
+          <span>대상 건수</span>
+          <strong id="countText">0건</strong>
+        </div>
+        <div>
+          <span>통역사</span>
+          <strong id="translatorText">0명</strong>
+        </div>
+        <button id="downloadAllBtn" type="button" disabled>전체 ZIP 저장</button>
+      </section>
+
+      <section class="view-switch" aria-label="보기 방식">
+        <button id="cardViewBtn" class="active" type="button">이미지 보기</button>
+        <button id="listViewBtn" type="button">리스트 보기</button>
+      </section>
+
+      <section id="status" class="status">시트 링크와 정산 금요일을 확인한 뒤 이미지를 생성하세요.</section>
+
+      <section id="results" class="results" aria-label="생성된 정산 이미지"></section>
+    </main>
+
+    <template id="cardTemplate">
+      <article class="result-card">
+        <div class="card-head">
+          <div>
+            <strong class="card-title"></strong>
+            <span class="card-meta"></span>
+          </div>
+          <button class="download-btn" type="button">저장</button>
+        </div>
+        <img class="preview" alt="정산 이미지 미리보기" />
+      </article>
+    </template>
+
+    <template id="listTemplate">
+      <article class="list-row">
+        <span class="row-date"></span>
+        <strong class="row-translator"></strong>
+        <span class="row-hospital"></span>
+        <span class="row-customer"></span>
+        <span class="row-tax"></span>
+        <strong class="row-final"></strong>
+        <button class="download-btn" type="button">저장</button>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
