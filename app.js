@@ -146,16 +146,17 @@ function extractSettlementRows(rows, start, end) {
     const hospital = clean(row[1]);
     const procedureAmount = toNumber(row[2]);
     const translator = clean(row[6]);
-    const settlementAmount = toNumber(row[11]);
+    const sheetSettlementAmount = toNumber(row[11]);
 
     if (!hospital || !translator) continue;
     if (EXCLUDED_TRANSLATORS.has(translator)) continue;
     if (!procedureAmount || procedureAmount <= 0) continue;
-    if (!settlementAmount || settlementAmount < 0) continue;
+    if (!sheetSettlementAmount || sheetSettlementAmount < 0) continue;
 
     const supplyAmount = toNumber(row[3]);
     const withholding = clean(row[10]).toUpperCase() === "TRUE";
-    const withholdingTax = withholding ? Math.round(settlementAmount * 0.033) : 0;
+    const settlementAmount = withholding ? Math.round(sheetSettlementAmount / 0.967) : sheetSettlementAmount;
+    const withholdingTax = withholding ? settlementAmount - sheetSettlementAmount : 0;
 
     entries.push({
       sourceIndex,
@@ -172,7 +173,7 @@ function extractSettlementRows(rows, start, end) {
       withholding,
       settlementAmount,
       withholdingTax,
-      finalAmount: settlementAmount - withholdingTax,
+      finalAmount: sheetSettlementAmount,
     });
   }
 
