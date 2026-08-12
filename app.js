@@ -48,7 +48,7 @@ async function loadAndRender() {
   try {
     const csvUrl = toCsvExportUrl(els.sheetUrl.value.trim());
     const response = await fetchCsv(csvUrl);
-    if (!response.ok) throw new Error(`시트 CSV를 읽지 못했습니다. HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await readCsvError(response));
 
     const csvText = await response.text();
     const rows = parseCsv(csvText);
@@ -75,6 +75,11 @@ function fetchCsv(csvUrl) {
     return fetch(csvUrl);
   }
   return fetch(`/sheet.csv?url=${encodeURIComponent(csvUrl)}`);
+}
+
+async function readCsvError(response) {
+  const message = (await response.text()).trim().slice(0, 240);
+  return `시트 CSV를 읽지 못했습니다. HTTP ${response.status}${message ? ` - ${message}` : ""}`;
 }
 
 function toCsvExportUrl(url) {

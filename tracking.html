@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>정산 미완료 트래킹</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="tracking-page">
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <span class="topbar-kicker">정산 관리</span>
+          <strong>미완료 트래킹</strong>
+        </div>
+        <span class="read-only-pill">읽기 전용 테스트보드</span>
+        <div class="topbar-actions">
+          <span id="roleIndicator" class="read-only-pill">권한: 전체</span>
+          <div class="language-switch" aria-label="언어 선택">
+            <button id="langKoBtn" class="active" type="button" data-lang="ko">한국어</button>
+            <button id="langZhBtn" type="button" data-lang="zh">中文</button>
+          </div>
+          <button id="helpGuideBtn" class="secondary-action" type="button">사용 설명서</button>
+        </div>
+      </header>
+
+      <nav class="admin-tabs" aria-label="페이지 이동">
+        <a href="/">정산 이미지 생성</a>
+        <a class="active" href="/tracking">미완료 트래킹</a>
+      </nav>
+
+      <section class="monthly-sheets-panel is-collapsed" aria-label="월별 시트 링크 관리">
+        <div class="monthly-sheets-head">
+          <div>
+            <strong>월별 시트 링크</strong>
+            <span id="monthlySheetSummary">저장된 월별 링크를 기준으로 조회합니다.</span>
+          </div>
+          <button id="toggleMonthlySheetsBtn" class="secondary-action" type="button" aria-expanded="false">
+            링크 관리
+          </button>
+        </div>
+        <div id="monthlySheetsBody" class="monthly-sheets-body" hidden>
+          <div class="monthly-url-grid">
+            <label class="field">
+              <span>1월</span>
+              <input data-month-url="01" type="url" placeholder="1월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>2월</span>
+              <input data-month-url="02" type="url" placeholder="2월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>3월</span>
+              <input data-month-url="03" type="url" placeholder="3월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>4월</span>
+              <input data-month-url="04" type="url" placeholder="4월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>5월</span>
+              <input data-month-url="05" type="url" placeholder="5월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>6월</span>
+              <input data-month-url="06" type="url" placeholder="6월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>7월</span>
+              <input data-month-url="07" type="url" placeholder="7월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>8월</span>
+              <input data-month-url="08" type="url" placeholder="8월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>9월</span>
+              <input data-month-url="09" type="url" placeholder="9월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>10월</span>
+              <input data-month-url="10" type="url" placeholder="10월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>11월</span>
+              <input data-month-url="11" type="url" placeholder="11월 시트 링크" />
+            </label>
+            <label class="field">
+              <span>12월</span>
+              <input data-month-url="12" type="url" placeholder="12월 시트 링크" />
+            </label>
+          </div>
+          <div class="monthly-sheets-actions">
+            <button id="saveMonthlySheetsBtn" type="button">저장</button>
+            <button id="clearMonthlySheetsBtn" class="secondary-action" type="button">비우기</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-filter-panel" aria-label="트래킹 조회 설정">
+        <div class="field wide legacy-sheet-url">
+          <label for="trackingSheetUrl">Google Sheet URL</label>
+          <input
+            id="trackingSheetUrl"
+            type="url"
+            value="https://docs.google.com/spreadsheets/d/1rznxjL6t9u1D9nrAwYLoDsstBTU9k-ZbIH6sS0aHAU4/edit?gid=431907368#gid=431907368"
+          />
+        </div>
+        <div class="field">
+          <label for="trackingYear">조회 연도</label>
+          <input id="trackingYear" type="number" min="2020" max="2035" value="2026" />
+        </div>
+        <div class="field">
+          <label for="trackingMonth">월 필터</label>
+          <select id="trackingMonth">
+            <option value="">전체</option>
+            <option value="01">1월</option>
+            <option value="02">2월</option>
+            <option value="03">3월</option>
+            <option value="04">4월</option>
+            <option value="05">5월</option>
+            <option value="06">6월</option>
+            <option value="07">7월</option>
+            <option value="08">8월</option>
+            <option value="09">9월</option>
+            <option value="10">10월</option>
+            <option value="11">11월</option>
+            <option value="12">12월</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="hospitalSearch">병원 검색</label>
+          <input id="hospitalSearch" type="search" placeholder="병원명" />
+        </div>
+        <div class="field">
+          <label for="translatorSearch">통역사 검색</label>
+          <input id="translatorSearch" type="search" placeholder="통역사" />
+        </div>
+        <div class="field">
+          <label for="practitionerName">실무자</label>
+          <select id="practitionerName">
+            <option value="">선택</option>
+            <option value="키키">키키</option>
+            <option value="TEST">TEST</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="adminName">관리자</label>
+          <select id="adminName">
+            <option value="">선택</option>
+            <option value="주길양">주길양</option>
+            <option value="왕어진">왕어진</option>
+            <option value="유승완">유승완</option>
+            <option value="TEST">TEST</option>
+          </select>
+        </div>
+        <button id="trackingLoadBtn" type="button">조회</button>
+      </section>
+
+      <section class="tracking-summary compact" aria-label="미완료 요약">
+        <article>
+          <span>전체 미완료</span>
+          <strong id="allIssueCount">0건</strong>
+          <b id="allIssueAmount">0원</b>
+        </article>
+        <article>
+          <span>병원 미수령</span>
+          <strong id="receivableCount">0건</strong>
+          <b id="receivableAmount">0원</b>
+        </article>
+        <article>
+          <span>통역사 미정산</span>
+          <strong id="translatorPendingCount">0건</strong>
+          <b id="translatorPendingAmount">0원</b>
+        </article>
+        <article>
+          <span>계산서 미발행</span>
+          <strong id="invoiceCount">0건</strong>
+          <b id="invoiceAmount">0원</b>
+        </article>
+      </section>
+
+      <section class="admin-table-panel">
+        <div class="table-toolbar">
+          <div class="tracking-tabs" aria-label="트래킹 항목">
+            <button class="active" type="button" data-tracking-tab="all">전체</button>
+            <button type="button" data-tracking-tab="receivable">병원 미수령</button>
+            <button type="button" data-tracking-tab="translator">통역사 미정산</button>
+            <button type="button" data-tracking-tab="invoice">계산서 미발행</button>
+          </div>
+          <div class="toolbar-actions">
+            <button id="auditLogBtn" class="secondary-action" type="button">로그 기록</button>
+            <span id="trackingStatus" class="status inline-status">시트를 불러오면 2026년 미완료 항목이 날짜순으로 표시됩니다.</span>
+          </div>
+        </div>
+
+        <div class="table-scroll">
+          <table class="tracking-table">
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>유형</th>
+                <th>병원</th>
+                <th>통역사</th>
+                <th>고객정보</th>
+                <th>경과</th>
+                <th>금액</th>
+                <th>확인 / 승인</th>
+              </tr>
+            </thead>
+            <tbody id="trackingList"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="auditLogPanel" class="audit-log-panel" aria-label="처리 로그" hidden>
+        <div class="audit-log-head">
+          <div>
+            <strong>처리 로그</strong>
+            <span>대시보드에서 Google Sheet에 반영한 내역입니다.</span>
+          </div>
+          <button id="closeAuditLogBtn" class="secondary-action" type="button">닫기</button>
+        </div>
+        <div class="table-scroll">
+          <table class="audit-log-table">
+            <thead>
+              <tr>
+                <th>처리 시각</th>
+                <th>유형</th>
+                <th>대상</th>
+                <th>고객정보</th>
+                <th>반영 위치</th>
+                <th>금액</th>
+                <th>실무자</th>
+                <th>관리자</th>
+                <th>결과</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogList"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="helpGuidePanel" class="help-guide-panel" aria-label="사용 설명서" hidden>
+        <div class="help-guide-head">
+          <div>
+            <strong data-guide-title>사용 설명서</strong>
+            <span data-guide-subtitle>역할별로 어떤 작업을 해야 하는지 정리했습니다.</span>
+          </div>
+          <button id="closeHelpGuideBtn" class="secondary-action" type="button" data-guide-close>닫기</button>
+        </div>
+        <div id="helpGuideContent" class="help-guide-content"></div>
+      </section>
+    </main>
+
+    <template id="trackingRowTemplate">
+      <tr class="tracking-row">
+        <td class="row-date-text"></td>
+        <td><span class="issue-badge"></span></td>
+        <td><strong class="row-hospital-name"></strong></td>
+        <td class="row-translator-name"></td>
+        <td class="row-detail"></td>
+        <td><span class="age-badge"></span></td>
+        <td class="tracking-money">
+          <span class="row-amount-label"></span>
+          <strong class="row-amount"></strong>
+        </td>
+        <td>
+          <div class="approval-controls">
+            <label>
+              <input class="practitioner-check" type="checkbox" />
+              <span>실무자</span>
+            </label>
+            <label>
+              <input class="admin-check" type="checkbox" />
+              <span>관리자</span>
+            </label>
+            <small class="approval-state">대기</small>
+          </div>
+        </td>
+      </tr>
+    </template>
+
+    <script src="./tracking.js"></script>
+  </body>
+</html>
