@@ -1,5 +1,5 @@
 import { createReadStream, existsSync } from "node:fs";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { createServer } from "node:http";
 import { createSign } from "node:crypto";
@@ -13,6 +13,7 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
 };
 const auditLogPath = join(root, "tracking-audit-log.jsonl");
+const monthlyLinksPath = join(root, "tracking-monthly-links.json");
 const googleTokenUrl = "https://oauth2.googleapis.com/token";
 const sheetsApiBase = "https://sheets.googleapis.com/v4/spreadsheets";
 const sheetsScope = "https://www.googleapis.com/auth/spreadsheets";
@@ -44,6 +45,14 @@ createServer((request, response) => {
   }
   if (url.pathname === "/tracking/audit-log" && request.method === "GET") {
     readTrackingAuditLog(response);
+    return;
+  }
+  if (url.pathname === "/tracking/monthly-links" && request.method === "GET") {
+    readTrackingMonthlyLinks(url, response);
+    return;
+  }
+  if (url.pathname === "/tracking/monthly-links" && request.method === "POST") {
+    saveTrackingMonthlyLinks(request, response);
     return;
   }
 
@@ -539,6 +548,60 @@ async function readTrackingAuditLog(response) {
   } catch (error) {
     sendJson(response, 500, { error: error instanceof Error ? error.message : "Failed to read audit log" });
   }
+}
+
+async function readTrackingMonthlyLinks(url, response) {
+  try {
+    const year = clean(url.searchParams.get("year")) || String(new Date().getFullYear());
+    const store = await readMonthlyLinksStore();
+    sendJson(response, 200, { year, links: store[year] || {} });
+  } catch (error) {
+    sendJson(response, 500, { error: error instanceof Error ? error.message : "Failed to read monthly sheet links" });
+  }
+}
+
+async function saveTrackingMonthlyLinks(request, response) {
+  try {
+    const payload = await readJsonBody(request);
+    const year = clean(payload.year) || String(new Date().getFullYear());
+    const links = sanitizeMonthlyLinks(payload.links || {});
+    const store = await readMonthlyLinksStore();
+    store[year] = links;
+    await writeFile(monthlyLinksPath, JSON.stringify(store, null, 2), "utf8");
+    sendJson(response, 200, { year, links });
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : "Failed to save monthly sheet links" });
+  }
+}
+
+async function readMonthlyLinksStore() {
+  const envStore = readMonthlyLinksFromEnv();
+  if (!existsSync(monthlyLinksPath)) return envStore;
+  try {
+    return { ...envStore, ...JSON.parse(await readFile(monthlyLinksPath, "utf8")) };
+  } catch {
+    return envStore;
+  }
+}
+
+function readMonthlyLinksFromEnv() {
+  if (!process.env.TRACKING_MONTHLY_SHEET_URLS) return {};
+  try {
+    const parsed = JSON.parse(process.env.TRACKING_MONTHLY_SHEET_URLS);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function sanitizeMonthlyLinks(input) {
+  const links = {};
+  for (const month of Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"))) {
+    const value = clean(input[month]);
+    if (value) links[month] = value;
+  }
+  return links;
 }
 
 async function appendAuditLog(record) {

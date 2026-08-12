@@ -141,24 +141,30 @@ let activeTab = "all";
 let approvalState = readApprovalState();
 let currentRole = readRole();
 let currentLang = readLanguage();
+let sharedMonthlySheetUrls = {};
+let monthlyLinksSynced = false;
 
 loadMonthlySheetInputs();
 updateMonthlySheetSummary();
 applyRoleShell();
 applyLanguage();
+syncMonthlySheetLinksFromServer();
 
 trackingEls.loadBtn.addEventListener("click", loadTrackingBoard);
 [trackingEls.month, trackingEls.hospitalSearch, trackingEls.translatorSearch].forEach((input) => {
   input.addEventListener("input", renderTracking);
 });
 trackingEls.year.addEventListener("change", () => {
+  sharedMonthlySheetUrls = {};
+  monthlyLinksSynced = false;
   loadMonthlySheetInputs();
   updateMonthlySheetSummary();
   trackingRows = [];
   renderTracking();
+  syncMonthlySheetLinksFromServer();
 });
 trackingEls.toggleMonthlySheetsBtn.addEventListener("click", toggleMonthlySheets);
-trackingEls.saveMonthlySheetsBtn.addEventListener("click", saveMonthlySheetInputs);
+trackingEls.saveMonthlySheetsBtn.addEventListener("click", saveMonthlySheetInputsShared);
 trackingEls.clearMonthlySheetsBtn.addEventListener("click", clearMonthlySheetInputs);
 trackingEls.auditLogBtn.addEventListener("click", loadAuditLog);
 trackingEls.closeAuditLogBtn.addEventListener("click", () => {
@@ -197,7 +203,7 @@ trackingEls.tabs.forEach((button) => {
 
 function readRole() {
   const role = new URLSearchParams(location.search).get("role");
-  return ["staff", "admin", "all"].includes(role) ? role : "all";
+  return ["staff", "admin", "all"].includes(role) ? role : "staff";
 }
 
 function readLanguage() {
@@ -217,6 +223,19 @@ function applyRoleShell() {
   }
   if (trackingEls.practitionerName) trackingEls.practitionerName.disabled = currentRole === "admin";
   if (trackingEls.adminName) trackingEls.adminName.disabled = currentRole === "staff";
+  if (trackingEls.toggleMonthlySheetsBtn) trackingEls.toggleMonthlySheetsBtn.hidden = currentRole === "staff";
+  if (trackingEls.monthlySheetsBody && currentRole === "staff") trackingEls.monthlySheetsBody.hidden = true;
+  if (trackingEls.monthlySheetsPanel && currentRole === "staff") trackingEls.monthlySheetsPanel.classList.add("is-collapsed");
+  applyNavigationLinks();
+}
+
+function applyNavigationLinks() {
+  const roleQuery = `role=${encodeURIComponent(currentRole)}&lang=${encodeURIComponent(currentLang)}`;
+  const tabLinks = [...document.querySelectorAll(".admin-tabs a")];
+  const imageLink = tabLinks.find((link) => new URL(link.href, location.origin).pathname === "/");
+  const trackingLink = tabLinks.find((link) => new URL(link.href, location.origin).pathname === "/tracking");
+  if (imageLink) imageLink.href = `/?${roleQuery}`;
+  if (trackingLink) trackingLink.href = `/tracking?${roleQuery}`;
 }
 
 function applyLanguage() {
@@ -740,11 +759,12 @@ function clearMonthlySheetInputs() {
   trackingEls.monthlyUrlInputs.forEach((input) => {
     input.value = "";
   });
-  saveMonthlySheetInputs();
+  saveMonthlySheetInputsShared();
 }
 
 function currentMonthlySheetUrls() {
-  return readMonthlySheetStore()[String(selectedYear())] || {};
+  const localUrls = readMonthlySheetStore()[String(selectedYear())] || {};
+  return monthlyLinksSynced ? sharedMonthlySheetUrls : localUrls;
 }
 
 function readMonthlySheetStore() {
@@ -761,6 +781,66 @@ function updateMonthlySheetSummary() {
   trackingEls.monthlySummary.textContent = months.length
     ? `${selectedYear()}년 ${months.map((month) => `${Number(month)}월`).join(", ")} 링크 저장됨`
     : `${selectedYear()}년 저장된 월별 링크가 없습니다.`;
+}
+
+function collectMonthlySheetInputs() {
+  const links = {};
+  trackingEls.monthlyUrlInputs.forEach((input) => {
+    const url = clean(input.value);
+    if (url) links[input.dataset.monthUrl] = url;
+  });
+  return links;
+}
+
+function currentMonthlySheetUrlsShared() {
+  const localUrls = readMonthlySheetStore()[String(selectedYear())] || {};
+  return monthlyLinksSynced ? sharedMonthlySheetUrls : localUrls;
+}
+
+async function saveMonthlySheetInputsShared() {
+  const store = readMonthlySheetStore();
+  const year = String(selectedYear());
+  store[year] = collectMonthlySheetInputs();
+  localStorage.setItem(MONTHLY_SHEETS_STORAGE_KEY, JSON.stringify(store));
+  sharedMonthlySheetUrls = store[year];
+  updateMonthlySheetSummary();
+  try {
+    const response = await fetch("/tracking/monthly-links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year, links: store[year] }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Failed to save monthly sheet links");
+    sharedMonthlySheetUrls = result.links || store[year];
+    monthlyLinksSynced = true;
+    store[year] = sharedMonthlySheetUrls;
+    localStorage.setItem(MONTHLY_SHEETS_STORAGE_KEY, JSON.stringify(store));
+    loadMonthlySheetInputs();
+    updateMonthlySheetSummary();
+    setTrackingStatus(`${year}년 월별 시트 링크를 저장했습니다.`);
+    loadTrackingBoard();
+  } catch (error) {
+    setTrackingStatus("월별 링크를 이 브라우저에만 저장했습니다. 서버 공유 저장에는 실패했습니다.", true);
+  }
+}
+
+async function syncMonthlySheetLinksFromServer() {
+  const year = String(selectedYear());
+  try {
+    const response = await fetch(`/tracking/monthly-links?year=${encodeURIComponent(year)}`);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Failed to load monthly sheet links");
+    sharedMonthlySheetUrls = result.links || {};
+    monthlyLinksSynced = true;
+    const store = readMonthlySheetStore();
+    store[year] = sharedMonthlySheetUrls;
+    localStorage.setItem(MONTHLY_SHEETS_STORAGE_KEY, JSON.stringify(store));
+    loadMonthlySheetInputs();
+    updateMonthlySheetSummary();
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 function renderTracking() {
