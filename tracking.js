@@ -223,9 +223,6 @@ function applyRoleShell() {
   }
   if (trackingEls.practitionerName) trackingEls.practitionerName.disabled = currentRole === "admin";
   if (trackingEls.adminName) trackingEls.adminName.disabled = currentRole === "staff";
-  if (trackingEls.toggleMonthlySheetsBtn) trackingEls.toggleMonthlySheetsBtn.hidden = currentRole === "staff";
-  if (trackingEls.monthlySheetsBody && currentRole === "staff") trackingEls.monthlySheetsBody.hidden = true;
-  if (trackingEls.monthlySheetsPanel && currentRole === "staff") trackingEls.monthlySheetsPanel.classList.add("is-collapsed");
   applyNavigationLinks();
 }
 
