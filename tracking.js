@@ -374,7 +374,7 @@ function legacyHelpGuideMarkup() {
 function renderRoleHelpGuide() {
   if (!trackingEls.helpGuideContent) return;
   const role = currentRole === "admin" ? "admin" : currentRole === "staff" ? "staff" : "all";
-  trackingEls.helpGuideContent.innerHTML = currentLang === "zh" ? helpGuideZh(role) : helpGuideKo(role);
+  trackingEls.helpGuideContent.innerHTML = currentLang === "zh" ? polishedHelpGuideZh(role) : polishedHelpGuideKo(role);
 }
 
 function helpGuideKo(role) {
@@ -441,6 +441,140 @@ function helpGuideZh(role) {
       </ol>
     </article>`;
   return `<div class="guide-grid">${role === "staff" ? staff + common : role === "admin" ? admin + common : staff + admin + common}</div>`;
+}
+
+function polishedHelpGuideKo(role) {
+  const staff = `
+    <article class="guide-card guide-primary">
+      <span class="guide-eyebrow">실무자용</span>
+      <h3>목표: 미완료 항목을 끝까지 줄이기</h3>
+      <p>이 대시보드는 아직 처리되지 않은 정산 항목을 끝까지 추적하기 위한 화면입니다. 실무자의 목표는 표시되는 항목을 확인하고, 관리자 승인까지 이어지도록 관리하여 리스트에 미완료 항목이 남지 않게 만드는 것입니다.</p>
+    </article>
+    <article class="guide-card">
+      <h3>기본 원칙</h3>
+      <ul class="guide-list">
+        <li>각 항목은 <strong>실무자 확인</strong>과 <strong>관리자 승인</strong>이 모두 끝나야 최종 완료됩니다.</li>
+        <li>실무자는 내역을 먼저 확인하고, 이상이 없을 때 본인 이름을 선택한 뒤 실무자 칸을 체크합니다.</li>
+        <li>실무자 체크만으로는 항목이 끝나지 않으므로, 관리자에게 승인 요청을 반드시 전달해야 합니다.</li>
+      </ul>
+    </article>
+    <article class="guide-card">
+      <h3>처리 순서</h3>
+      <ol>
+        <li>조회 조건을 확인한 뒤 <strong>조회</strong>를 눌러 미완료 항목을 불러옵니다.</li>
+        <li>날짜, 병원, 통역사, 고객정보, 금액을 실제 업무 기준으로 확인합니다.</li>
+        <li>문제가 없으면 실무자 이름을 선택하고 <strong>실무자</strong> 칸을 체크합니다.</li>
+        <li>체크한 항목을 관리자에게 알리고, 관리자 승인이 완료될 때까지 주기적으로 확인합니다.</li>
+      </ol>
+    </article>
+    <article class="guide-card guide-warning">
+      <h3>가장 중요한 점</h3>
+      <p>실무자의 역할은 체크에서 끝나지 않습니다. 화면에 항목이 남아 있다면 아직 회사 기준의 최종 완료가 아닙니다. 관리자 승인까지 이어지도록 계속 확인하는 것이 핵심입니다.</p>
+    </article>`;
+  const admin = `
+    <article class="guide-card guide-primary">
+      <span class="guide-eyebrow">관리자용</span>
+      <h3>목표: 최종 검토 후 완료 확정</h3>
+      <p>관리자는 실무자가 확인한 항목을 다시 검토하고, 문제가 없을 때 최종 승인하여 미완료 리스트에서 항목이 사라지도록 처리합니다.</p>
+    </article>
+    <article class="guide-card">
+      <h3>기본 원칙</h3>
+      <ul class="guide-list">
+        <li>관리자 승인은 <strong>실무자 체크가 완료된 항목</strong>에 대해서만 가능합니다.</li>
+        <li>관리자는 실무자의 체크가 정확했는지 다시 확인하는 최종 검토자입니다.</li>
+        <li>관리자 승인 후에는 해당 내용이 Google Sheet에 반영되므로, 승인 전 더블체크가 필수입니다.</li>
+      </ul>
+    </article>
+    <article class="guide-card">
+      <h3>처리 순서</h3>
+      <ol>
+        <li>대시보드에서 미완료 항목과 실무자 체크 여부를 확인합니다.</li>
+        <li>날짜, 병원, 통역사, 고객정보, 금액, 처리 유형을 다시 검토합니다.</li>
+        <li>문제가 없으면 관리자 이름을 선택하고 <strong>관리자</strong> 칸을 체크합니다.</li>
+        <li>실무자와 관리자 체크가 모두 완료되면 항목이 최종 처리되고 리스트에서 사라집니다.</li>
+      </ol>
+    </article>
+    <article class="guide-card guide-warning">
+      <h3>관리자의 책임</h3>
+      <p>관리자 승인은 단순 확인이 아니라 최종 확정 단계입니다. 잘못된 항목이 완료 처리되지 않도록 시트와 실제 정산 기준을 기준으로 한 번 더 확인해야 합니다.</p>
+    </article>`;
+  const common = `
+    <article class="guide-card guide-note">
+      <h3>공통 확인 사항</h3>
+      <ul class="guide-list">
+        <li>처리 후 항목이 화면에서 사라졌는지 확인합니다.</li>
+        <li>필요할 경우 <strong>로그 기록</strong>에서 누가, 언제, 어떤 항목을 처리했는지 확인합니다.</li>
+        <li>금액이나 고객정보가 이상하면 임의로 완료하지 말고 먼저 내부 확인을 진행합니다.</li>
+      </ul>
+    </article>`;
+  return `<div class="guide-grid polished-guide">${role === "staff" ? staff + common : role === "admin" ? admin + common : staff + admin + common}</div>`;
+}
+
+function polishedHelpGuideZh(role) {
+  const staff = `
+    <article class="guide-card guide-primary">
+      <span class="guide-eyebrow">实务人员使用说明</span>
+      <h3>目标：持续减少未完成项目</h3>
+      <p>本页面用于追踪尚未处理完成的结算项目。实务人员的目标是确认每一条内容，并推动管理员审批，直到列表中不再留下待处理项目。</p>
+    </article>
+    <article class="guide-card">
+      <h3>基本原则</h3>
+      <ul class="guide-list">
+        <li>每个项目都需要 <strong>实务确认</strong> 和 <strong>管理员审批</strong> 两个步骤，才算最终完成。</li>
+        <li>实务人员先核对内容，确认无误后选择自己的名字，并勾选实务栏。</li>
+        <li>只完成实务勾选还不算结束，必须通知管理员继续审批。</li>
+      </ul>
+    </article>
+    <article class="guide-card">
+      <h3>处理流程</h3>
+      <ol>
+        <li>确认查询条件后，点击 <strong>查询</strong> 载入未完成项目。</li>
+        <li>核对日期、医院、翻译、客户信息和金额是否正确。</li>
+        <li>确认无误后选择实务人员姓名，并勾选 <strong>实务</strong> 栏。</li>
+        <li>勾选后通知管理员审批，并定期跟进，直到项目从列表中消失。</li>
+      </ol>
+    </article>
+    <article class="guide-card guide-warning">
+      <h3>最重要的事项</h3>
+      <p>实务人员的工作不是勾选后就结束。只要列表中还显示该项目，就代表公司内部流程尚未最终完成。请持续提醒管理员完成审批。</p>
+    </article>`;
+  const admin = `
+    <article class="guide-card guide-primary">
+      <span class="guide-eyebrow">管理员使用说明</span>
+      <h3>目标：最终复核并确认完成</h3>
+      <p>管理员负责复核实务人员已确认的项目。确认无误后进行最终审批，使项目从未完成列表中消失。</p>
+    </article>
+    <article class="guide-card">
+      <h3>基本原则</h3>
+      <ul class="guide-list">
+        <li>管理员只能审批 <strong>实务人员已经勾选</strong> 的项目。</li>
+        <li>管理员是最终复核人，需要确认实务人员勾选的内容是否正确。</li>
+        <li>管理员审批后，结果会反映到 Google Sheet，因此审批前必须再次确认。</li>
+      </ul>
+    </article>
+    <article class="guide-card">
+      <h3>处理流程</h3>
+      <ol>
+        <li>在大屏中确认未完成项目以及实务人员是否已勾选。</li>
+        <li>再次核对日期、医院、翻译、客户信息、金额和处理类型。</li>
+        <li>确认无误后选择管理员姓名，并勾选 <strong>管理员</strong> 栏。</li>
+        <li>实务和管理员都完成勾选后，项目会最终处理并从列表中消失。</li>
+      </ol>
+    </article>
+    <article class="guide-card guide-warning">
+      <h3>管理员责任</h3>
+      <p>管理员审批不是简单确认，而是最终确认步骤。请以原始表格和实际结算标准为依据，避免错误项目被完成处理。</p>
+    </article>`;
+  const common = `
+    <article class="guide-card guide-note">
+      <h3>共同确认事项</h3>
+      <ul class="guide-list">
+        <li>处理后，请确认该项目是否已从页面列表中消失。</li>
+        <li>必要时可在 <strong>日志记录</strong> 中查看处理人、处理时间和处理内容。</li>
+        <li>如果金额或客户信息异常，请不要直接完成处理，先进行内部确认。</li>
+      </ul>
+    </article>`;
+  return `<div class="guide-grid polished-guide">${role === "staff" ? staff + common : role === "admin" ? admin + common : staff + admin + common}</div>`;
 }
 
 async function loadTrackingBoard() {

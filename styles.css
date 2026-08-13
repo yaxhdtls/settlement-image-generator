@@ -885,18 +885,56 @@ button:disabled {
   background: #fbfdff;
 }
 
+.polished-guide {
+  gap: 14px;
+}
+
+.guide-card.guide-primary {
+  grid-column: 1 / -1;
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.guide-card.guide-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.guide-card.guide-note {
+  grid-column: 1 / -1;
+  border-color: #dbeafe;
+  background: #f8fbff;
+}
+
+.guide-eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .guide-grid h3 {
   margin: 0 0 10px;
   color: #0f1f3d;
   font-size: 15px;
 }
 
-.guide-grid ol {
+.guide-grid ol,
+.guide-list {
   margin: 0;
   padding-left: 18px;
   color: #243b64;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.guide-list li + li,
+.guide-grid ol li + li {
+  margin-top: 5px;
 }
 
 .guide-grid p {
