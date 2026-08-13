@@ -3,6 +3,7 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { createServer } from "node:http";
 import { createSign } from "node:crypto";
+import { connect as tlsConnect } from "node:tls";
 
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const port = Number(process.env.PORT || 4173);
@@ -16,6 +17,8 @@ const auditLogPath = join(root, "tracking-audit-log.jsonl");
 const monthlyLinksPath = join(root, "tracking-monthly-links.json");
 const defaultTrackingConfigSpreadsheetId = process.env.TRACKING_CONFIG_SPREADSHEET_ID || "1rznxjL6t9u1D9nrAwYLoDsstBTU9k-ZbIH6sS0aHAU4";
 const dashboardConfigSheetTitle = "\uB300\uC2DC\uBCF4\uB4DC \uC124\uC815";
+const appBaseUrl = process.env.APP_BASE_URL || "https://settlement-image-generator.onrender.com";
+const reminderSecret = process.env.REMINDER_SECRET || "";
 const googleTokenUrl = "https://oauth2.googleapis.com/token";
 const sheetsApiBase = "https://sheets.googleapis.com/v4/spreadsheets";
 const sheetsScope = "https://www.googleapis.com/auth/spreadsheets";
@@ -55,6 +58,10 @@ createServer((request, response) => {
   }
   if (url.pathname === "/tracking/monthly-links" && request.method === "POST") {
     saveTrackingMonthlyLinks(request, response);
+    return;
+  }
+  if (url.pathname === "/tracking/email-reminder" && request.method === "POST") {
+    sendTrackingEmailReminder(request, response);
     return;
   }
 
@@ -721,6 +728,345 @@ function readJsonBody(request) {
 function sendJson(response, status, data) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(data));
+}
+
+async function sendTrackingEmailReminder(request, response) {
+  try {
+    const payload = await readJsonBody(request);
+    assertReminderAuthorized(request, payload);
+    const year = clean(payload.year) || String(new Date().getFullYear());
+    const summary = await buildTrackingReminderSummary(year);
+
+    if (payload.dryRun === true) {
+      const recipients = reminderRecipients({ allowEmpty: true });
+      sendJson(response, 200, {
+        sent: false,
+        dryRun: true,
+        recipients: recipients.map(({ role, name, email }) => ({ role, name, email })),
+        summary: serializeReminderSummary(summary),
+      });
+      return;
+    }
+
+    if (summary.groups.all.length === 0) {
+      sendJson(response, 200, { sent: false, reason: "no_pending_items", summary: serializeReminderSummary(summary) });
+      return;
+    }
+
+    const recipients = reminderRecipients();
+    const sent = [];
+    for (const recipient of recipients) {
+      await sendEmail({
+        to: recipient.email,
+        subject: reminderSubject(recipient, summary),
+        text: reminderBody(recipient, summary),
+      });
+      sent.push({ role: recipient.role, name: recipient.name, email: recipient.email });
+    }
+
+    sendJson(response, 200, { sent: true, recipients: sent, summary: serializeReminderSummary(summary) });
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : "Failed to send email reminder" });
+  }
+}
+
+function assertReminderAuthorized(request, payload) {
+  if (!reminderSecret) return;
+  const headerSecret = clean(request.headers["x-reminder-secret"]);
+  const bodySecret = clean(payload.secret);
+  if (headerSecret !== reminderSecret && bodySecret !== reminderSecret) {
+    throw new Error("Invalid reminder secret");
+  }
+}
+
+function reminderRecipients(options = {}) {
+  const staffEmail = clean(process.env.REMINDER_STAFF_EMAIL);
+  const adminEmail = clean(process.env.REMINDER_ADMIN_EMAIL);
+  const recipients = [];
+  if (staffEmail) recipients.push({ role: "staff", name: process.env.REMINDER_STAFF_NAME || "kiki", email: staffEmail });
+  if (adminEmail) recipients.push({ role: "admin", name: process.env.REMINDER_ADMIN_NAME || "\u5468\u5409\u9633", email: adminEmail });
+  if (!recipients.length && !options.allowEmpty) throw new Error("Reminder recipient emails are not configured");
+  return recipients;
+}
+
+function reminderSubject(recipient, summary) {
+  return recipient.role === "staff"
+    ? `【润兔国际】结算待处理事项提醒（${summary.groups.all.length}件）`
+    : `【润兔国际】结算待复核事项提醒（${summary.groups.all.length}件）`;
+}
+
+function reminderBody(recipient, summary) {
+  const dashboardUrl = `${appBaseUrl}/tracking?role=${recipient.role === "staff" ? "staff" : "admin"}&lang=zh`;
+  const urgent = summary.urgentCount > 0 ? `\n优先处理：目前有 ${summary.urgentCount} 件事项已超过 21 天，请尽快确认。\n` : "";
+  const large = summary.largeAmountCount > 0 ? `\n金额提醒：其中有 ${summary.largeAmountCount} 件事项金额达到 1,000,000 韩元以上，请特别留意。\n` : "";
+  const roleText = recipient.role === "staff"
+    ? "请先核对待处理事项的日期、医院、客户信息和金额。确认无误后，请选择自己的名字并勾选“操作者”栏；勾选完成后，请及时提醒管理员进行最终复核。"
+    : "请复核操作者已确认的事项，并再次确认日期、医院、客户信息、金额和处理状态。确认无误后，请选择自己的名字并勾选“管理员”栏，完成最终确认。";
+
+  return [
+    `${recipient.name}，您好。`,
+    "",
+    "目前结算追踪看板中仍有未完成事项，请按照您的角色进行确认和处理。",
+    "",
+    "当前待处理概况：",
+    `- 未完成事项：${summary.groups.all.length}件`,
+    `- 医院款项未确认：${summary.groups.receivable.length}件 / ${formatWon(sumIssues(summary.groups.receivable))}`,
+    `- 翻译费用未结算：${summary.groups.translator.length}件 / ${formatWon(sumIssues(summary.groups.translator))}`,
+    `- 税单未开具：${summary.groups.invoice.length}件 / ${formatWon(sumIssues(summary.groups.invoice))}`,
+    urgent.trim(),
+    large.trim(),
+    "处理方式：",
+    roleText,
+    "",
+    "看板链接：",
+    dashboardUrl,
+    "",
+    "处理完成后，请确认相关事项是否已从看板列表中消失。",
+    "谢谢。",
+  ].filter((line) => line !== "").join("\n");
+}
+
+function serializeReminderSummary(summary) {
+  return {
+    year: summary.year,
+    all: summary.groups.all.length,
+    receivable: summary.groups.receivable.length,
+    translator: summary.groups.translator.length,
+    invoice: summary.groups.invoice.length,
+    urgentCount: summary.urgentCount,
+    largeAmountCount: summary.largeAmountCount,
+  };
+}
+
+async function buildTrackingReminderSummary(year) {
+  const store = await readMonthlyLinksStore(defaultTrackingConfigSpreadsheetId);
+  const links = store[year] || {};
+  const token = await getGoogleAccessToken();
+  const rows = [];
+
+  for (const month of Object.keys(links).sort((a, b) => Number(a) - Number(b))) {
+    const source = parseSheetSource(links[month], month);
+    const sheetTitle = await getSheetTitleByGid(source.spreadsheetId, source.gid, token);
+    const values = await readSheetRows(source.spreadsheetId, sheetTitle, token);
+    rows.push(...extractReminderRows(values, source, year));
+  }
+
+  const issues = rows.flatMap((row) => reminderIssuesForRow(row)).sort((a, b) => {
+    const byDate = a.row.date.localeCompare(b.row.date);
+    if (byDate !== 0) return byDate;
+    const byRow = a.row.sheetRowNumber - b.row.sheetRowNumber;
+    if (byRow !== 0) return byRow;
+    return { receivable: 1, translator: 2, invoice: 3 }[a.type] - { receivable: 1, translator: 2, invoice: 3 }[b.type];
+  });
+
+  const groups = {
+    all: issues,
+    receivable: issues.filter((issue) => issue.type === "receivable"),
+    translator: issues.filter((issue) => issue.type === "translator"),
+    invoice: issues.filter((issue) => issue.type === "invoice"),
+  };
+  const urgentCount = issues.filter((issue) => issue.elapsedDays >= 21).length;
+  const largeAmountCount = issues.filter((issue) => issue.amount >= 1_000_000).length;
+  return { year, rows, groups, urgentCount, largeAmountCount };
+}
+
+function parseSheetSource(url, month) {
+  const parsed = new URL(url);
+  const match = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+  if (!match) throw new Error(`Invalid sheet URL for month ${Number(month)}`);
+  const gid = parsed.searchParams.get("gid") || parsed.hash.match(/gid=(\d+)/)?.[1];
+  if (!gid) throw new Error(`Missing gid in sheet URL for month ${Number(month)}`);
+  return {
+    month,
+    spreadsheetId: match[1],
+    gid,
+    url,
+  };
+}
+
+function extractReminderRows(values, source, year) {
+  const result = [];
+  let activeDate = "";
+  const headerIndex = findTrackingHeaderIndex(values);
+  const columns = detectTrackingColumns(values[headerIndex] || []);
+  adjustTrackingColumns(values, headerIndex, columns);
+
+  for (const [offset, row] of values.slice(headerIndex + 1).entries()) {
+    const sourceIndex = headerIndex + 1 + offset;
+    const parsedDate = parseSheetDate(clean(row[columns.date]), year);
+    if (parsedDate) activeDate = parsedDate;
+    if (!activeDate) continue;
+
+    const hospital = clean(row[columns.hospital]);
+    const procedureAmount = toNumber(row[columns.procedureAmount]);
+    if (!hospital || !procedureAmount) continue;
+
+    const supplyAmount = toNumber(row[columns.supplyAmount]);
+    const translator = clean(row[columns.translator]);
+    const settlementAmount = toNumber(row[columns.settlementAmount]);
+    const receivableAmount = toNumber(row[columns.receivableAmount]);
+    const invoiceStatus = clean(row[columns.invoiceStatus]);
+    const reportAmount = toNumber(row[columns.reportAmount]);
+    const paymentKind = classifyPaymentKind(procedureAmount, supplyAmount);
+
+    result.push({
+      date: activeDate,
+      elapsedDays: daysSince(activeDate),
+      sheetRowNumber: sourceIndex + 1,
+      hospital,
+      translator,
+      procedureAmount,
+      supplyAmount,
+      settlementAmount,
+      receivableAmount,
+      paymentReceived: isChecked(row[columns.paymentReceived]),
+      invoiceStatus,
+      reportAmount,
+      translatorSettled: isChecked(row[columns.translatorSettled]),
+      paymentKind,
+      isCash: paymentKind === "cash",
+    });
+  }
+
+  return result;
+}
+
+function reminderIssuesForRow(row) {
+  const issues = [];
+  if (!row.paymentReceived && row.receivableAmount > 0) {
+    issues.push(toReminderIssue(row, "receivable", row.receivableAmount));
+  }
+  if (isTranslatorSettlementTarget(row) && !row.translatorSettled && row.settlementAmount > 0) {
+    issues.push(toReminderIssue(row, "translator", row.settlementAmount));
+  }
+  const invoiceAmount = invoiceReminderAmount(row);
+  if (invoiceAmount > 0) {
+    issues.push(toReminderIssue(row, "invoice", invoiceAmount));
+  }
+  return issues;
+}
+
+function toReminderIssue(row, type, amount) {
+  return { type, amount, elapsedDays: row.elapsedDays, row };
+}
+
+function invoiceReminderAmount(row) {
+  const status = row.invoiceStatus.trim();
+  if (row.paymentKind === "cash") return status === "\uBD88\uD544\uC694" ? 0 : row.procedureAmount;
+  if (row.paymentKind === "tax_invoice") return status === "" ? row.reportAmount || row.procedureAmount : 0;
+  if (row.paymentKind === "amount_error" || row.paymentKind === "unknown") return row.procedureAmount || row.supplyAmount;
+  return 0;
+}
+
+function isTranslatorSettlementTarget(row) {
+  return row.translator && !["\uC724\uD1A0\uD22C\uC5B4", "\u76F4\u5BA2"].includes(row.translator);
+}
+
+function classifyPaymentKind(procedureAmount, supplyAmount) {
+  if (!procedureAmount || !supplyAmount) return "unknown";
+  if (procedureAmount === supplyAmount) return "cash";
+  if (procedureAmount > supplyAmount) return "tax_invoice";
+  return "amount_error";
+}
+
+function isChecked(value) {
+  const normalized = clean(value).toLowerCase();
+  return ["true", "o", "\uC644\uB8CC", "yes", "y", "1"].includes(normalized);
+}
+
+function daysSince(inputDate) {
+  const date = new Date(`${inputDate}T00:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+}
+
+function sumIssues(issues) {
+  return issues.reduce((sum, issue) => sum + Number(issue.amount || 0), 0);
+}
+
+function formatWon(amount) {
+  return `${Math.round(Number(amount || 0)).toLocaleString("ko-KR")}韩元`;
+}
+
+async function sendEmail({ to, subject, text }) {
+  const host = clean(process.env.SMTP_HOST);
+  const port = Number(process.env.SMTP_PORT || 465);
+  const user = clean(process.env.SMTP_USER);
+  const pass = clean(process.env.SMTP_PASS);
+  const from = clean(process.env.SMTP_FROM) || user;
+  if (!host || !user || !pass || !from) throw new Error("SMTP settings are not configured");
+
+  const message = buildEmailMessage({ from, to, subject, text });
+  await smtpSend({ host, port, user, pass, from, to, message });
+}
+
+function buildEmailMessage({ from, to, subject, text }) {
+  return [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${mimeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+    "",
+  ].join("\r\n");
+}
+
+function mimeHeader(value) {
+  return `=?UTF-8?B?${Buffer.from(String(value), "utf8").toString("base64")}?=`;
+}
+
+function smtpSend({ host, port, user, pass, from, to, message }) {
+  return new Promise((resolve, reject) => {
+    const socket = tlsConnect({ host, port, servername: host }, () => {});
+    let buffer = "";
+    const queue = [
+      { expect: 220, command: `EHLO ${host}` },
+      { expect: 250, command: "AUTH LOGIN" },
+      { expect: 334, command: Buffer.from(user).toString("base64") },
+      { expect: 334, command: Buffer.from(pass).toString("base64") },
+      { expect: 235, command: `MAIL FROM:<${extractEmail(from)}>` },
+      { expect: 250, command: `RCPT TO:<${extractEmail(to)}>` },
+      { expect: 250, command: "DATA" },
+      { expect: 354, command: `${message}\r\n.` },
+      { expect: 250, command: "QUIT" },
+      { expect: 221, command: null },
+    ];
+    let step = 0;
+
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      if (!buffer.endsWith("\r\n")) return;
+      const lines = buffer.trimEnd().split(/\r?\n/);
+      const last = lines[lines.length - 1] || "";
+      if (/^\d{3}-/.test(last)) return;
+      const code = Number(last.slice(0, 3));
+      buffer = "";
+      const current = queue[step];
+      if (!current) return;
+      if (code !== current.expect) {
+        socket.destroy();
+        reject(new Error(`SMTP error ${code}: ${last}`));
+        return;
+      }
+      step += 1;
+      if (current.command === null) {
+        socket.end();
+        resolve();
+        return;
+      }
+      socket.write(`${current.command}\r\n`);
+    });
+    socket.on("error", reject);
+  });
+}
+
+function extractEmail(value) {
+  const match = String(value).match(/<([^>]+)>/);
+  return clean(match ? match[1] : value);
 }
 
 async function proxySheetCsv(url, response) {
