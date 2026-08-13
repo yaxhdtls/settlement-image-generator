@@ -766,8 +766,21 @@ async function sendTrackingEmailReminder(request, response) {
 
     sendJson(response, 200, { sent: true, recipients: sent, summary: serializeReminderSummary(summary) });
   } catch (error) {
-    sendJson(response, 400, { error: error instanceof Error ? error.message : "Failed to send email reminder" });
+    sendJson(response, 400, { error: describeError(error, "Failed to send email reminder") });
   }
+}
+
+function describeError(error, fallback) {
+  if (error instanceof Error) {
+    const details = [
+      error.message,
+      error.name && error.name !== "Error" ? `name=${error.name}` : "",
+      error.code ? `code=${error.code}` : "",
+      error.reason ? `reason=${error.reason}` : "",
+    ].filter(Boolean);
+    return details.join(" | ") || fallback;
+  }
+  return clean(error) || fallback;
 }
 
 function assertReminderAuthorized(request, payload) {
@@ -1022,6 +1035,7 @@ function smtpSend({ host, port, user, pass, from, to, message }) {
   return new Promise((resolve, reject) => {
     const socket = tlsConnect({ host, port, servername: host }, () => {});
     let buffer = "";
+    let settled = false;
     const queue = [
       { expect: 220, command: `EHLO ${host}` },
       { expect: 250, command: "AUTH LOGIN" },
@@ -1035,9 +1049,23 @@ function smtpSend({ host, port, user, pass, from, to, message }) {
       { expect: 221, command: null },
     ];
     let step = 0;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(error instanceof Error ? error : new Error(clean(error) || "SMTP connection failed"));
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      socket.end();
+      resolve();
+    };
 
     socket.setEncoding("utf8");
+    socket.setTimeout(30_000, () => fail(new Error(`SMTP timeout at step ${step + 1}`)));
     socket.on("data", (chunk) => {
+      if (settled) return;
       buffer += chunk;
       if (!buffer.endsWith("\r\n")) return;
       const lines = buffer.trimEnd().split(/\r?\n/);
@@ -1048,19 +1076,20 @@ function smtpSend({ host, port, user, pass, from, to, message }) {
       const current = queue[step];
       if (!current) return;
       if (code !== current.expect) {
-        socket.destroy();
-        reject(new Error(`SMTP error ${code}: ${last}`));
+        fail(new Error(`SMTP step ${step + 1} expected ${current.expect}, got ${code}: ${last || "empty response"}`));
         return;
       }
       step += 1;
       if (current.command === null) {
-        socket.end();
-        resolve();
+        finish();
         return;
       }
       socket.write(`${current.command}\r\n`);
     });
-    socket.on("error", reject);
+    socket.on("error", (error) => fail(error));
+    socket.on("close", () => {
+      if (!settled) fail(new Error(`SMTP connection closed before completion at step ${step + 1}`));
+    });
   });
 }
 
