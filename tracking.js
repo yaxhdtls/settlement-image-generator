@@ -43,7 +43,7 @@ const I18N = {
   },
   zh: {
     roleAll: "权限：全部",
-    roleStaff: "权限：实务",
+    roleStaff: "权限：操作者",
     roleAdmin: "权限：管理",
     help: "使用说明",
     close: "关闭",
@@ -57,7 +57,7 @@ const I18N = {
     all: "全部",
     hospitalSearch: "医院搜索",
     translatorSearch: "翻译搜索",
-    practitioner: "实务",
+    practitioner: "操作者",
     admin: "管理",
     select: "选择",
     totalPending: "全部未完成",
@@ -317,18 +317,18 @@ function legacyHelpGuideMarkup() {
   trackingEls.helpGuideContent.innerHTML = currentLang === "zh" ? `
     <div class="guide-grid">
       <article>
-        <h3>实务人员</h3>
+        <h3>操作者</h3>
         <ol>
           <li>选择月份后点击“查询”。</li>
           <li>确认医院未收款或翻译未结算项目。</li>
-          <li>只勾选“实务”栏。管理栏无法操作。</li>
-          <li>实务和管理都勾选后，系统会反映到 Google Sheet。</li>
+          <li>只勾选“操作者”栏。管理栏无法操作。</li>
+          <li>操作者和管理都勾选后，系统会反映到 Google Sheet。</li>
         </ol>
       </article>
       <article>
         <h3>管理人员</h3>
         <ol>
-          <li>确认实务人员已勾选的项目。</li>
+          <li>确认操作者已勾选的项目。</li>
           <li>只勾选“管理”栏。</li>
           <li>税票/现金项目由管理人员选择“完成”或“不需要”后反映。</li>
           <li>需要确认历史时点击“操作记录”。</li>
@@ -336,7 +336,7 @@ function legacyHelpGuideMarkup() {
       </article>
       <article>
         <h3>访问链接</h3>
-        <p><strong>实务：</strong> ${escapeHtml(staffUrl)}</p>
+        <p><strong>操作者：</strong> ${escapeHtml(staffUrl)}</p>
         <p><strong>管理：</strong> ${escapeHtml(adminUrl)}</p>
         <p><strong>测试全部：</strong> ${escapeHtml(allUrl)}</p>
       </article>
@@ -413,11 +413,11 @@ function helpGuideKo(role) {
 function helpGuideZh(role) {
   const staff = `
     <article>
-      <h3>实务操作</h3>
+      <h3>操作者操作</h3>
       <ol>
         <li>选择月份筛选后点击查询。</li>
         <li>确认医院未收款、翻译未结算项目是否符合实际情况。</li>
-        <li>确认完成后，只勾选实务栏。</li>
+        <li>确认完成后，只勾选操作者栏。</li>
         <li>管理栏和税票处理由管理员操作。</li>
       </ol>
     </article>`;
@@ -425,9 +425,9 @@ function helpGuideZh(role) {
     <article>
       <h3>管理操作</h3>
       <ol>
-        <li>审核已由实务人员确认的项目。</li>
+        <li>审核已由操作者确认的项目。</li>
         <li>确认无误后，勾选管理栏。</li>
-        <li>实务和管理都完成后，系统会自动反映到 Google Sheet。</li>
+        <li>操作者和管理都完成后，系统会自动反映到 Google Sheet。</li>
         <li>税票/现金项目由管理员选择完成或不需要后反映。</li>
       </ol>
     </article>`;
@@ -513,16 +513,16 @@ function polishedHelpGuideKo(role) {
 function polishedHelpGuideZh(role) {
   const staff = `
     <article class="guide-card guide-primary">
-      <span class="guide-eyebrow">实务人员使用说明</span>
+      <span class="guide-eyebrow">操作者使用说明</span>
       <h3>目标：持续减少未完成项目</h3>
-      <p>本页面用于追踪尚未处理完成的结算项目。实务人员的目标是确认每一条内容，并推动管理员审批，直到列表中不再留下待处理项目。</p>
+      <p>本页面用于追踪尚未处理完成的结算项目。操作者的目标是确认每一条内容，并推动管理员审批，直到列表中不再留下待处理项目。</p>
     </article>
     <article class="guide-card">
       <h3>基本原则</h3>
       <ul class="guide-list">
-        <li>每个项目都需要 <strong>实务确认</strong> 和 <strong>管理员审批</strong> 两个步骤，才算最终完成。</li>
-        <li>实务人员先核对内容，确认无误后选择自己的名字，并勾选实务栏。</li>
-        <li>只完成实务勾选还不算结束，必须通知管理员继续审批。</li>
+        <li>每个项目都需要 <strong>操作者确认</strong> 和 <strong>管理员审批</strong> 两个步骤，才算最终完成。</li>
+        <li>操作者先核对内容，确认无误后选择自己的名字，并勾选操作者栏。</li>
+        <li>只完成操作者勾选还不算结束，必须通知管理员继续审批。</li>
       </ul>
     </article>
     <article class="guide-card">
@@ -530,35 +530,35 @@ function polishedHelpGuideZh(role) {
       <ol>
         <li>确认查询条件后，点击 <strong>查询</strong> 载入未完成项目。</li>
         <li>核对日期、医院、翻译、客户信息和金额是否正确。</li>
-        <li>确认无误后选择实务人员姓名，并勾选 <strong>实务</strong> 栏。</li>
+        <li>确认无误后选择操作者姓名，并勾选 <strong>操作者</strong> 栏。</li>
         <li>勾选后通知管理员审批，并定期跟进，直到项目从列表中消失。</li>
       </ol>
     </article>
     <article class="guide-card guide-warning">
       <h3>最重要的事项</h3>
-      <p>实务人员的工作不是勾选后就结束。只要列表中还显示该项目，就代表公司内部流程尚未最终完成。请持续提醒管理员完成审批。</p>
+      <p>操作者的工作不是勾选后就结束。只要列表中还显示该项目，就代表公司内部流程尚未最终完成。请持续提醒管理员完成审批。</p>
     </article>`;
   const admin = `
     <article class="guide-card guide-primary">
       <span class="guide-eyebrow">管理员使用说明</span>
       <h3>目标：最终复核并确认完成</h3>
-      <p>管理员负责复核实务人员已确认的项目。确认无误后进行最终审批，使项目从未完成列表中消失。</p>
+      <p>管理员负责复核操作者已确认的项目。确认无误后进行最终审批，使项目从未完成列表中消失。</p>
     </article>
     <article class="guide-card">
       <h3>基本原则</h3>
       <ul class="guide-list">
-        <li>管理员只能审批 <strong>实务人员已经勾选</strong> 的项目。</li>
-        <li>管理员是最终复核人，需要确认实务人员勾选的内容是否正确。</li>
+        <li>管理员只能审批 <strong>操作者已经勾选</strong> 的项目。</li>
+        <li>管理员是最终复核人，需要确认操作者勾选的内容是否正确。</li>
         <li>管理员审批后，结果会反映到 Google Sheet，因此审批前必须再次确认。</li>
       </ul>
     </article>
     <article class="guide-card">
       <h3>处理流程</h3>
       <ol>
-        <li>在大屏中确认未完成项目以及实务人员是否已勾选。</li>
+        <li>在大屏中确认未完成项目以及操作者是否已勾选。</li>
         <li>再次核对日期、医院、翻译、客户信息、金额和处理类型。</li>
         <li>确认无误后选择管理员姓名，并勾选 <strong>管理员</strong> 栏。</li>
-        <li>实务和管理员都完成勾选后，项目会最终处理并从列表中消失。</li>
+        <li>操作者和管理员都完成勾选后，项目会最终处理并从列表中消失。</li>
       </ol>
     </article>
     <article class="guide-card guide-warning">
