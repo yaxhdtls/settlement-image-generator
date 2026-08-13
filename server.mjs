@@ -1002,6 +1002,12 @@ function formatWon(amount) {
 }
 
 async function sendEmail({ to, subject, text }) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (resendKey) {
+    await sendEmailViaResend({ to, subject, text, apiKey: resendKey });
+    return;
+  }
+
   const host = clean(process.env.SMTP_HOST);
   const port = Number(process.env.SMTP_PORT || 465);
   const user = clean(process.env.SMTP_USER);
@@ -1011,6 +1017,41 @@ async function sendEmail({ to, subject, text }) {
 
   const message = buildEmailMessage({ from, to, subject, text });
   await smtpSend({ host, port, user, pass, from, to, message });
+}
+
+async function sendEmailViaResend({ to, subject, text, apiKey }) {
+  const fallbackFrom = clean(process.env.SMTP_FROM) || clean(process.env.SMTP_USER);
+  const from = clean(process.env.RESEND_FROM) || fallbackFrom;
+  if (!from) throw new Error("RESEND_FROM or SMTP_FROM must be configured");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text,
+      html: `<pre style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; white-space: pre-wrap; line-height: 1.6;">${escapeHtml(text)}</pre>`,
+    }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`Resend API error ${response.status}: ${body || response.statusText}`);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function buildEmailMessage({ from, to, subject, text }) {
