@@ -14,6 +14,8 @@ const types = {
 };
 const auditLogPath = join(root, "tracking-audit-log.jsonl");
 const monthlyLinksPath = join(root, "tracking-monthly-links.json");
+const defaultTrackingConfigSpreadsheetId = process.env.TRACKING_CONFIG_SPREADSHEET_ID || "1rznxjL6t9u1D9nrAwYLoDsstBTU9k-ZbIH6sS0aHAU4";
+const dashboardConfigSheetTitle = "\uB300\uC2DC\uBCF4\uB4DC \uC124\uC815";
 const googleTokenUrl = "https://oauth2.googleapis.com/token";
 const sheetsApiBase = "https://sheets.googleapis.com/v4/spreadsheets";
 const sheetsScope = "https://www.googleapis.com/auth/spreadsheets";
@@ -451,6 +453,22 @@ async function updateSheetValue(spreadsheetId, range, value, token) {
   if (!response.ok) throw await googleError(response, "Failed to update sheet value");
 }
 
+async function updateSheetValues(spreadsheetId, range, values, token) {
+  const response = await googleFetch(`${sheetsApiBase}/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, token, {
+    method: "PUT",
+    body: JSON.stringify({ values }),
+  });
+  if (!response.ok) throw await googleError(response, "Failed to update sheet values");
+}
+
+async function clearSheetRange(spreadsheetId, range, token) {
+  const response = await googleFetch(`${sheetsApiBase}/${spreadsheetId}/values/${encodeURIComponent(range)}:clear`, token, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) throw await googleError(response, "Failed to clear sheet range");
+}
+
 async function appendSheetLog(spreadsheetId, token, values) {
   await ensureAuditSheet(spreadsheetId, token);
   const response = await googleFetch(`${sheetsApiBase}/${spreadsheetId}/values/${encodeURIComponent("'작업로그'!A:O")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, token, {
@@ -553,7 +571,8 @@ async function readTrackingAuditLog(response) {
 async function readTrackingMonthlyLinks(url, response) {
   try {
     const year = clean(url.searchParams.get("year")) || String(new Date().getFullYear());
-    const store = await readMonthlyLinksStore();
+    const spreadsheetId = clean(url.searchParams.get("spreadsheetId")) || defaultTrackingConfigSpreadsheetId;
+    const store = await readMonthlyLinksStore(spreadsheetId);
     sendJson(response, 200, { year, links: store[year] || {} });
   } catch (error) {
     sendJson(response, 500, { error: error instanceof Error ? error.message : "Failed to read monthly sheet links" });
@@ -565,16 +584,25 @@ async function saveTrackingMonthlyLinks(request, response) {
     const payload = await readJsonBody(request);
     const year = clean(payload.year) || String(new Date().getFullYear());
     const links = sanitizeMonthlyLinks(payload.links || {});
-    const store = await readMonthlyLinksStore();
+    const spreadsheetId = clean(payload.spreadsheetId) || defaultTrackingConfigSpreadsheetId;
+    const store = await readMonthlyLinksStore(spreadsheetId);
     store[year] = links;
-    await writeFile(monthlyLinksPath, JSON.stringify(store, null, 2), "utf8");
+    await writeMonthlyLinksStore(store, spreadsheetId);
     sendJson(response, 200, { year, links });
   } catch (error) {
     sendJson(response, 400, { error: error instanceof Error ? error.message : "Failed to save monthly sheet links" });
   }
 }
 
-async function readMonthlyLinksStore() {
+async function readMonthlyLinksStore(spreadsheetId = defaultTrackingConfigSpreadsheetId) {
+  if (hasGoogleCredentials()) {
+    try {
+      return await readMonthlyLinksFromConfigSheet(spreadsheetId);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+
   const envStore = readMonthlyLinksFromEnv();
   if (!existsSync(monthlyLinksPath)) return envStore;
   try {
@@ -582,6 +610,67 @@ async function readMonthlyLinksStore() {
   } catch {
     return envStore;
   }
+}
+
+async function writeMonthlyLinksStore(store, spreadsheetId = defaultTrackingConfigSpreadsheetId) {
+  if (hasGoogleCredentials()) {
+    await writeMonthlyLinksToConfigSheet(store, spreadsheetId);
+    return;
+  }
+  await writeFile(monthlyLinksPath, JSON.stringify(store, null, 2), "utf8");
+}
+
+async function readMonthlyLinksFromConfigSheet(spreadsheetId) {
+  const token = await getGoogleAccessToken();
+  await ensureDashboardConfigSheet(spreadsheetId, token);
+  const rows = await readSheetRows(spreadsheetId, dashboardConfigSheetTitle, token);
+  const store = {};
+
+  for (const row of rows.slice(1)) {
+    const year = clean(row[0]);
+    const monthNumber = Number(clean(row[1]));
+    const month = Number.isInteger(monthNumber) && monthNumber >= 1 && monthNumber <= 12 ? String(monthNumber).padStart(2, "0") : "";
+    const url = clean(row[2]);
+    if (!year || !month || !url) continue;
+    if (!store[year]) store[year] = {};
+    store[year][month] = url;
+  }
+
+  return store;
+}
+
+async function writeMonthlyLinksToConfigSheet(store, spreadsheetId) {
+  const token = await getGoogleAccessToken();
+  await ensureDashboardConfigSheet(spreadsheetId, token);
+  const rows = [["\uC5F0\uB3C4", "\uC6D4", "\uC2DC\uD2B8 \uB9C1\uD06C"]];
+
+  for (const year of Object.keys(store).sort()) {
+    const links = store[year] || {};
+    for (const month of Object.keys(links).sort((a, b) => Number(a) - Number(b))) {
+      const url = clean(links[month]);
+      if (url) rows.push([year, String(Number(month)), url]);
+    }
+  }
+
+  await clearSheetRange(spreadsheetId, `${quoteSheetName(dashboardConfigSheetTitle)}!A:C`, token);
+  await updateSheetValues(spreadsheetId, `${quoteSheetName(dashboardConfigSheetTitle)}!A1:C${rows.length}`, rows, token);
+}
+
+async function ensureDashboardConfigSheet(spreadsheetId, token) {
+  const metadata = await googleFetch(`${sheetsApiBase}/${spreadsheetId}?fields=sheets.properties(title)`, token);
+  if (!metadata.ok) throw await googleError(metadata, "Failed to read spreadsheet metadata");
+  const data = await metadata.json();
+  if (data.sheets?.some((sheet) => sheet.properties?.title === dashboardConfigSheetTitle)) return;
+
+  const response = await googleFetch(`${sheetsApiBase}/${spreadsheetId}:batchUpdate`, token, {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [
+        { addSheet: { properties: { title: dashboardConfigSheetTitle } } },
+      ],
+    }),
+  });
+  if (!response.ok) throw await googleError(response, "Failed to create dashboard config sheet");
 }
 
 function readMonthlyLinksFromEnv() {
