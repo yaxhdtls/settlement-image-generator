@@ -127,6 +127,16 @@ const trackingEls = {
   closeAuditLogBtn: document.querySelector("#closeAuditLogBtn"),
   auditLogPanel: document.querySelector("#auditLogPanel"),
   auditLogList: document.querySelector("#auditLogList"),
+  counterpartyMappingBtn: document.querySelector("#counterpartyMappingBtn"),
+  closeCounterpartyMappingBtn: document.querySelector("#closeCounterpartyMappingBtn"),
+  counterpartyMappingPanel: document.querySelector("#counterpartyMappingPanel"),
+  counterpartySearch: document.querySelector("#counterpartySearch"),
+  reloadCounterpartyMappingBtn: document.querySelector("#reloadCounterpartyMappingBtn"),
+  counterpartyMappingResults: document.querySelector("#counterpartyMappingResults"),
+  counterpartyMappingForm: document.querySelector("#counterpartyMappingForm"),
+  mappingHospitalInput: document.querySelector("#mappingHospitalInput"),
+  mappingCounterpartyInput: document.querySelector("#mappingCounterpartyInput"),
+  mappingMemoInput: document.querySelector("#mappingMemoInput"),
   roleIndicator: document.querySelector("#roleIndicator"),
   langButtons: [...document.querySelectorAll("[data-lang]")],
   helpGuideBtn: document.querySelector("#helpGuideBtn"),
@@ -143,12 +153,14 @@ let currentRole = readRole();
 let currentLang = readLanguage();
 let sharedMonthlySheetUrls = {};
 let monthlyLinksSynced = false;
+let counterpartyMappings = [];
 
 loadMonthlySheetInputs();
 updateMonthlySheetSummary();
 applyRoleShell();
 applyLanguage();
 syncMonthlySheetLinksFromServer();
+syncCounterpartyMappingsFromServer({ silent: true });
 
 trackingEls.loadBtn.addEventListener("click", loadTrackingBoard);
 [trackingEls.month, trackingEls.hospitalSearch, trackingEls.translatorSearch].forEach((input) => {
@@ -170,6 +182,18 @@ trackingEls.auditLogBtn.addEventListener("click", loadAuditLog);
 trackingEls.closeAuditLogBtn.addEventListener("click", () => {
   trackingEls.auditLogPanel.hidden = true;
 });
+trackingEls.counterpartyMappingBtn?.addEventListener("click", () => {
+  trackingEls.counterpartyMappingPanel.hidden = false;
+  renderCounterpartyMappings();
+  syncCounterpartyMappingsFromServer({ silent: true });
+  trackingEls.counterpartySearch?.focus();
+});
+trackingEls.closeCounterpartyMappingBtn?.addEventListener("click", () => {
+  trackingEls.counterpartyMappingPanel.hidden = true;
+});
+trackingEls.reloadCounterpartyMappingBtn?.addEventListener("click", () => syncCounterpartyMappingsFromServer());
+trackingEls.counterpartySearch?.addEventListener("input", renderCounterpartyMappings);
+trackingEls.counterpartyMappingForm?.addEventListener("submit", saveCounterpartyMapping);
 trackingEls.langButtons.forEach((button) => {
   button.addEventListener("click", () => {
     currentLang = button.dataset.lang === "zh" ? "zh" : "ko";
@@ -247,6 +271,7 @@ function applyLanguage() {
   setText("#toggleMonthlySheetsBtn", t("linkManage"));
   setText("#trackingLoadBtn", t("search"));
   setText("#auditLogBtn", t("auditLog"));
+  setText("#counterpartyMappingBtn", currentLang === "zh" ? "\u5165\u8D26\u540D\u641C\u7D22" : "\uC785\uAE08\uBA85 \uAC80\uC0C9");
   setText(".admin-tabs a[href='/']", t("settlementImage"));
   setText(".admin-tabs a[href='/tracking']", t("tracking"));
   setLabel("trackingYear", t("year"));
@@ -583,6 +608,7 @@ async function loadTrackingBoard() {
   dismissedKeys = new Set();
 
   try {
+    await syncCounterpartyMappingsFromServer({ silent: true });
     const sources = getTrackingSources();
     const allRows = [];
 
@@ -601,6 +627,85 @@ async function loadTrackingBoard() {
   } finally {
     trackingEls.loadBtn.disabled = false;
   }
+}
+
+async function syncCounterpartyMappingsFromServer(options = {}) {
+  try {
+    const response = await fetch("/tracking/counterparty-mappings");
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "입금명 매핑을 불러오지 못했습니다.");
+    counterpartyMappings = Array.isArray(result.mappings) ? result.mappings : [];
+    renderCounterpartyMappings();
+    renderTracking();
+    if (!options.silent) setTrackingStatus(`입금명 매핑 ${counterpartyMappings.length}건을 불러왔습니다.`);
+  } catch (error) {
+    if (!options.silent) setTrackingStatus(error.message || "입금명 매핑을 불러오지 못했습니다.", true);
+  }
+}
+
+async function saveCounterpartyMapping(event) {
+  event.preventDefault();
+  const hospital = clean(trackingEls.mappingHospitalInput.value);
+  const counterparty = clean(trackingEls.mappingCounterpartyInput.value);
+  const memo = clean(trackingEls.mappingMemoInput.value);
+  if (!hospital || !counterparty) {
+    setTrackingStatus("병원명과 입금명을 모두 입력하세요.", true);
+    return;
+  }
+
+  const actor = clean(trackingEls.adminName.value) || clean(trackingEls.practitionerName.value) || "대시보드";
+  const response = await fetch("/tracking/counterparty-mappings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hospital, counterparty, memo, createdBy: actor, updatedBy: actor }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    setTrackingStatus(result.error || "입금명 매핑 저장에 실패했습니다.", true);
+    return;
+  }
+
+  trackingEls.counterpartyMappingForm.reset();
+  counterpartyMappings.push(result.mapping);
+  renderCounterpartyMappings();
+  renderTracking();
+  setTrackingStatus("입금명 매핑을 저장했습니다.");
+}
+
+function renderCounterpartyMappings() {
+  if (!trackingEls.counterpartyMappingResults) return;
+  const query = normalizeText(trackingEls.counterpartySearch?.value || "");
+  const rows = counterpartyMappings
+    .filter((item) => item?.active !== false)
+    .filter((item) => {
+      if (!query) return true;
+      return normalizeText(`${item.hospital} ${item.counterparty} ${item.memo}`).includes(query);
+    })
+    .sort((a, b) => clean(a.hospital).localeCompare(clean(b.hospital), "ko"));
+
+  if (!rows.length) {
+    trackingEls.counterpartyMappingResults.innerHTML = `<div class="mapping-empty">검색 결과가 없습니다.</div>`;
+    return;
+  }
+
+  trackingEls.counterpartyMappingResults.innerHTML = rows.map((item) => `
+    <article class="mapping-result">
+      <strong>${escapeHtml(item.hospital)}</strong>
+      <span>입금명: ${escapeHtml(item.counterparty)}</span>
+      ${item.memo ? `<small>${escapeHtml(item.memo)}</small>` : ""}
+    </article>
+  `).join("");
+}
+
+function counterpartyCandidatesForHospital(hospital) {
+  const key = normalizeText(hospital);
+  if (!key) return [];
+  const candidates = counterpartyMappings
+    .filter((item) => item?.active !== false)
+    .filter((item) => normalizeText(item.hospital) === key)
+    .map((item) => clean(item.counterparty))
+    .filter(Boolean);
+  return [...new Set(candidates)];
 }
 
 function extractRows(rows, source = {}) {
@@ -1499,6 +1604,10 @@ function detailText(issue) {
   const row = issue.row;
   const parts = [];
   if (row.customerInfo) parts.push(row.customerInfo);
+  const counterpartyCandidates = counterpartyCandidatesForHospital(row.hospital);
+  if (issue.type === "receivable" && counterpartyCandidates.length) {
+    parts.push(`입금명 후보: ${counterpartyCandidates.join(", ")}`);
+  }
   if (issue.label === "금액 오류") parts.push("금액 오류: 공급가액이 시술금액보다 큽니다.");
   if (issue.label === "금액 확인") parts.push("금액 확인: 시술금액 또는 공급가액이 비어 있습니다.");
   if (issue.label === "계산서 미발행") parts.push(`계산서 상태: ${row.invoiceStatus || "미발행"}`);
@@ -1510,7 +1619,8 @@ function matchesFilters(row) {
   const hospitalQuery = clean(trackingEls.hospitalSearch.value).toLowerCase();
   const translatorQuery = clean(trackingEls.translatorSearch.value).toLowerCase();
   if (month && String(row.date.getMonth() + 1).padStart(2, "0") !== month) return false;
-  if (hospitalQuery && !row.hospital.toLowerCase().includes(hospitalQuery)) return false;
+  const counterpartyText = counterpartyCandidatesForHospital(row.hospital).join(" ").toLowerCase();
+  if (hospitalQuery && !`${row.hospital} ${counterpartyText}`.toLowerCase().includes(hospitalQuery)) return false;
   if (translatorQuery && !row.translator.toLowerCase().includes(translatorQuery)) return false;
   return true;
 }
@@ -1644,6 +1754,10 @@ function formatShortDate(date) {
 
 function clean(value) {
   return String(value ?? "").trim();
+}
+
+function normalizeText(value) {
+  return clean(value).replace(/\s+/g, "").toLowerCase();
 }
 
 function cleanCustomerInfo(value, translator = "") {

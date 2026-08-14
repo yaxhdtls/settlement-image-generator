@@ -823,6 +823,97 @@ button:disabled {
   overflow: hidden;
 }
 
+.mapping-panel {
+  margin-top: 14px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(31, 64, 120, 0.06);
+  overflow: hidden;
+}
+
+.mapping-head,
+.mapping-tools,
+.mapping-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e6edf7;
+}
+
+.mapping-head {
+  justify-content: space-between;
+}
+
+.mapping-head strong,
+.mapping-head span {
+  display: block;
+}
+
+.mapping-head span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mapping-tools input {
+  max-width: 420px;
+}
+
+.mapping-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.mapping-result {
+  padding: 12px;
+  border: 1px solid #e6edf7;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.mapping-result strong,
+.mapping-result span,
+.mapping-result small {
+  display: block;
+}
+
+.mapping-result span {
+  margin-top: 5px;
+  color: #174ea6;
+  font-weight: 800;
+}
+
+.mapping-result small {
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.mapping-empty {
+  grid-column: 1 / -1;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.mapping-form {
+  flex-wrap: wrap;
+  border-bottom: 0;
+  background: #f8fbff;
+}
+
+.mapping-form strong {
+  flex: 0 0 100%;
+}
+
+.mapping-form input {
+  flex: 1 1 180px;
+}
+
 .help-guide-panel {
   position: fixed;
   inset: 0;

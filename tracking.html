@@ -189,6 +189,7 @@
             <button type="button" data-tracking-tab="invoice">계산서 미발행</button>
           </div>
           <div class="toolbar-actions">
+            <button id="counterpartyMappingBtn" class="secondary-action" type="button">입금명 검색</button>
             <button id="auditLogBtn" class="secondary-action" type="button">로그 기록</button>
             <span id="trackingStatus" class="status inline-status">시트를 불러오면 2026년 미완료 항목이 날짜순으로 표시됩니다.</span>
           </div>
@@ -239,6 +240,27 @@
             <tbody id="auditLogList"></tbody>
           </table>
         </div>
+      </section>
+      <section id="counterpartyMappingPanel" class="mapping-panel" aria-label="입금명 매핑" hidden>
+        <div class="mapping-head">
+          <div>
+            <strong>입금명 검색</strong>
+            <span>병원명 또는 실제 입금명으로 검색할 수 있습니다.</span>
+          </div>
+          <button id="closeCounterpartyMappingBtn" class="secondary-action" type="button">닫기</button>
+        </div>
+        <div class="mapping-tools">
+          <input id="counterpartySearch" type="search" placeholder="병원명 또는 입금명 검색" />
+          <button id="reloadCounterpartyMappingBtn" class="secondary-action" type="button">새로고침</button>
+        </div>
+        <div id="counterpartyMappingResults" class="mapping-results"></div>
+        <form id="counterpartyMappingForm" class="mapping-form">
+          <strong>새 매핑 추가</strong>
+          <input id="mappingHospitalInput" type="text" placeholder="병원명" required />
+          <input id="mappingCounterpartyInput" type="text" placeholder="입금명" required />
+          <input id="mappingMemoInput" type="text" placeholder="메모" />
+          <button type="submit">저장</button>
+        </form>
       </section>
       <section id="helpGuidePanel" class="help-guide-panel" aria-label="사용 설명서" hidden>
         <div class="help-guide-head">

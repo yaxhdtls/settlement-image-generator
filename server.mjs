@@ -15,8 +15,12 @@ const types = {
 };
 const auditLogPath = join(root, "tracking-audit-log.jsonl");
 const monthlyLinksPath = join(root, "tracking-monthly-links.json");
+const counterpartyMappingsPath = join(root, "tracking-counterparty-mappings.json");
+const counterpartyMappingSeedPath = join(root, "counterparty-mapping-seed.json");
 const defaultTrackingConfigSpreadsheetId = process.env.TRACKING_CONFIG_SPREADSHEET_ID || "1rznxjL6t9u1D9nrAwYLoDsstBTU9k-ZbIH6sS0aHAU4";
 const dashboardConfigSheetTitle = "\uB300\uC2DC\uBCF4\uB4DC \uC124\uC815";
+const counterpartyMappingSheetTitle = "\uC785\uAE08\uBA85 \uB9E4\uD551";
+const counterpartyMappingHeaders = ["\uBCD1\uC6D0\uBA85", "\uC785\uAE08\uBA85", "\uBA54\uBAA8", "\uC0AC\uC6A9\uC5EC\uBD80", "\uB4F1\uB85D\uC790", "\uB4F1\uB85D\uC77C", "\uCD5C\uADFC\uC218\uC815\uC790", "\uCD5C\uADFC\uC218\uC815\uC77C"];
 const appBaseUrl = process.env.APP_BASE_URL || "https://settlement-image-generator.onrender.com";
 const reminderSecret = process.env.REMINDER_SECRET || "";
 const googleTokenUrl = "https://oauth2.googleapis.com/token";
@@ -58,6 +62,14 @@ createServer((request, response) => {
   }
   if (url.pathname === "/tracking/monthly-links" && request.method === "POST") {
     saveTrackingMonthlyLinks(request, response);
+    return;
+  }
+  if (url.pathname === "/tracking/counterparty-mappings" && request.method === "GET") {
+    readCounterpartyMappings(response);
+    return;
+  }
+  if (url.pathname === "/tracking/counterparty-mappings" && request.method === "POST") {
+    saveCounterpartyMapping(request, response);
     return;
   }
   if (url.pathname === "/tracking/email-reminder" && request.method === "POST") {
@@ -664,20 +676,159 @@ async function writeMonthlyLinksToConfigSheet(store, spreadsheetId) {
 }
 
 async function ensureDashboardConfigSheet(spreadsheetId, token) {
+  await ensureSheet(spreadsheetId, token, dashboardConfigSheetTitle);
+}
+
+async function ensureCounterpartyMappingSheet(spreadsheetId, token) {
+  await ensureSheet(spreadsheetId, token, counterpartyMappingSheetTitle);
+}
+
+async function ensureSheet(spreadsheetId, token, sheetTitle) {
   const metadata = await googleFetch(`${sheetsApiBase}/${spreadsheetId}?fields=sheets.properties(title)`, token);
   if (!metadata.ok) throw await googleError(metadata, "Failed to read spreadsheet metadata");
   const data = await metadata.json();
-  if (data.sheets?.some((sheet) => sheet.properties?.title === dashboardConfigSheetTitle)) return;
+  if (data.sheets?.some((sheet) => sheet.properties?.title === sheetTitle)) return;
 
   const response = await googleFetch(`${sheetsApiBase}/${spreadsheetId}:batchUpdate`, token, {
     method: "POST",
     body: JSON.stringify({
       requests: [
-        { addSheet: { properties: { title: dashboardConfigSheetTitle } } },
+        { addSheet: { properties: { title: sheetTitle } } },
       ],
     }),
   });
-  if (!response.ok) throw await googleError(response, "Failed to create dashboard config sheet");
+  if (!response.ok) throw await googleError(response, `Failed to create ${sheetTitle} sheet`);
+}
+
+async function readCounterpartyMappings(response) {
+  try {
+    const mappings = await readCounterpartyMappingStore(defaultTrackingConfigSpreadsheetId);
+    sendJson(response, 200, { mappings });
+  } catch (error) {
+    sendJson(response, 500, { error: error instanceof Error ? error.message : "Failed to read counterparty mappings" });
+  }
+}
+
+async function saveCounterpartyMapping(request, response) {
+  try {
+    const payload = await readJsonBody(request);
+    const mapping = sanitizeCounterpartyMapping(payload);
+    if (!mapping.hospital || !mapping.counterparty) {
+      sendJson(response, 400, { error: "병원명과 입금명을 모두 입력하세요." });
+      return;
+    }
+    const saved = await appendCounterpartyMappingStore(mapping, defaultTrackingConfigSpreadsheetId);
+    sendJson(response, 200, { mapping: saved });
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : "Failed to save counterparty mapping" });
+  }
+}
+
+async function readCounterpartyMappingStore(spreadsheetId = defaultTrackingConfigSpreadsheetId) {
+  if (hasGoogleCredentials()) {
+    try {
+      return await readCounterpartyMappingsFromSheet(spreadsheetId);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+  if (!existsSync(counterpartyMappingsPath)) return await readCounterpartySeed();
+  try {
+    return JSON.parse(await readFile(counterpartyMappingsPath, "utf8"));
+  } catch {
+    return await readCounterpartySeed();
+  }
+}
+
+async function appendCounterpartyMappingStore(mapping, spreadsheetId = defaultTrackingConfigSpreadsheetId) {
+  const saved = sanitizeCounterpartyMapping(mapping);
+  if (hasGoogleCredentials()) {
+    const token = await getGoogleAccessToken();
+    await ensureCounterpartyMappingSheet(spreadsheetId, token);
+    const rows = await ensureCounterpartyMappingRows(spreadsheetId, token);
+    await updateSheetValues(spreadsheetId, `${quoteSheetName(counterpartyMappingSheetTitle)}!A${rows.length + 1}:H${rows.length + 1}`, [counterpartyMappingToRow(saved)], token);
+    return saved;
+  }
+
+  const mappings = await readCounterpartyMappingStore(spreadsheetId);
+  mappings.push(saved);
+  await writeFile(counterpartyMappingsPath, JSON.stringify(mappings, null, 2), "utf8");
+  return saved;
+}
+
+async function readCounterpartyMappingsFromSheet(spreadsheetId) {
+  const token = await getGoogleAccessToken();
+  await ensureCounterpartyMappingSheet(spreadsheetId, token);
+  const rows = await ensureCounterpartyMappingRows(spreadsheetId, token);
+  return rows.slice(1).map(rowToCounterpartyMapping).filter((row) => row.hospital && row.counterparty && row.active);
+}
+
+async function ensureCounterpartyMappingRows(spreadsheetId, token) {
+  let rows = await readSheetRows(spreadsheetId, counterpartyMappingSheetTitle, token);
+  if (!rows.length) {
+    rows = [counterpartyMappingHeaders];
+    await updateSheetValues(spreadsheetId, `${quoteSheetName(counterpartyMappingSheetTitle)}!A1:H1`, rows, token);
+  }
+  if (rows.length === 1) {
+    const seed = await readCounterpartySeed();
+    if (seed.length) {
+      const seedRows = seed.map(counterpartyMappingToRow);
+      await updateSheetValues(spreadsheetId, `${quoteSheetName(counterpartyMappingSheetTitle)}!A2:H${seedRows.length + 1}`, seedRows, token);
+      rows = [counterpartyMappingHeaders, ...seedRows];
+    }
+  }
+  return rows;
+}
+
+async function readCounterpartySeed() {
+  if (!existsSync(counterpartyMappingSeedPath)) return [];
+  try {
+    const seed = JSON.parse(await readFile(counterpartyMappingSeedPath, "utf8"));
+    return Array.isArray(seed) ? seed.map(sanitizeCounterpartyMapping).filter((row) => row.hospital && row.counterparty) : [];
+  } catch {
+    return [];
+  }
+}
+
+function sanitizeCounterpartyMapping(input = {}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const actor = clean(input.updatedBy) || clean(input.createdBy) || "대시보드";
+  return {
+    hospital: clean(input.hospital),
+    counterparty: clean(input.counterparty),
+    memo: clean(input.memo),
+    active: input.active === undefined ? true : input.active !== false && clean(input.active).toLowerCase() !== "false",
+    createdBy: clean(input.createdBy) || actor,
+    createdAt: clean(input.createdAt) || today,
+    updatedBy: actor,
+    updatedAt: clean(input.updatedAt) || today,
+  };
+}
+
+function counterpartyMappingToRow(mapping) {
+  return [
+    mapping.hospital,
+    mapping.counterparty,
+    mapping.memo,
+    mapping.active ? "TRUE" : "FALSE",
+    mapping.createdBy,
+    mapping.createdAt,
+    mapping.updatedBy,
+    mapping.updatedAt,
+  ];
+}
+
+function rowToCounterpartyMapping(row) {
+  return sanitizeCounterpartyMapping({
+    hospital: row[0],
+    counterparty: row[1],
+    memo: row[2],
+    active: clean(row[3]).toLowerCase() !== "false",
+    createdBy: row[4],
+    createdAt: row[5],
+    updatedBy: row[6],
+    updatedAt: row[7],
+  });
 }
 
 function readMonthlyLinksFromEnv() {
