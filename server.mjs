@@ -1299,6 +1299,16 @@ async function proxySheetCsv(url, response) {
   }
 
   try {
+    if (hasGoogleCredentials()) {
+      const sheetRef = parseGoogleSheetUrl(target);
+      if (sheetRef?.spreadsheetId && sheetRef?.gid) {
+        const csv = await readSheetCsvWithGoogleApi(sheetRef.spreadsheetId, sheetRef.gid);
+        response.writeHead(200, { "content-type": "text/csv; charset=utf-8" });
+        response.end(csv);
+        return;
+      }
+    }
+
     const upstream = await fetchSheetCsv(target);
     if (!upstream.ok) {
       response.writeHead(upstream.status);
@@ -1312,6 +1322,22 @@ async function proxySheetCsv(url, response) {
     response.writeHead(502);
     response.end(error instanceof Error ? error.message : "Failed to fetch sheet");
   }
+}
+
+async function readSheetCsvWithGoogleApi(spreadsheetId, gid) {
+  const token = await getGoogleAccessToken();
+  const sheetTitle = await getSheetTitleByGid(spreadsheetId, gid, token);
+  const rows = await readSheetRows(spreadsheetId, sheetTitle, token);
+  return rowsToCsv(rows);
+}
+
+function rowsToCsv(rows) {
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 async function fetchSheetCsv(inputUrl) {
@@ -1338,15 +1364,20 @@ async function fetchSheetCsv(inputUrl) {
 }
 
 function toSheetCsvCandidates(inputUrl) {
+  const sheetRef = parseGoogleSheetUrl(inputUrl);
+  if (!sheetRef?.spreadsheetId || !sheetRef?.gid) return [inputUrl];
+
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetRef.spreadsheetId}/export?format=csv&gid=${sheetRef.gid}`;
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetRef.spreadsheetId}/gviz/tq?tqx=out:csv&gid=${sheetRef.gid}`;
+  return [...new Set([inputUrl, exportUrl, gvizUrl])];
+}
+
+function parseGoogleSheetUrl(inputUrl) {
   const parsed = new URL(inputUrl);
   const match = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
-  if (!match) return [inputUrl];
+  if (!match) return null;
 
-  const id = match[1];
+  const spreadsheetId = match[1];
   const gid = parsed.searchParams.get("gid") || parsed.hash.match(/gid=(\d+)/)?.[1];
-  if (!gid) return [inputUrl];
-
-  const exportUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-  const gvizUrl = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&gid=${gid}`;
-  return [...new Set([inputUrl, exportUrl, gvizUrl])];
+  return { spreadsheetId, gid };
 }
